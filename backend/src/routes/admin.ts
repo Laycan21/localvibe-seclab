@@ -1,4 +1,6 @@
-import { exec } from "node:child_process";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import path from "node:path";
 import { Router } from "express";
 import braces from "braces";
 import { rateLimit } from "express-rate-limit";
@@ -32,32 +34,50 @@ function wrapText(value: string, width: number): string {
   if (line) lines.push(line);
   return lines.join("\n");
 }
-
-router.get("/export", (req, res) => {
-  const file = String(req.query.file ?? "notas.txt");
-  exec(`cat ./exports/${file}`, (error, stdout) => {
-    if (error) {
-      res.status(500).json({ error: "No se pudo exportar el archivo solicitado" });
+router.get("/export", async (req, res) => {
+  router.get("/export", async (req, res) => {
+    if (!/^[A-Za-z0-9_.-]+$/.test(file) || file.includes("..")) {
+      res.status(400).json({ error: "Nombre de archivo inválido" });
       return;
     }
-    res.type("text/plain").send(stdout);
+    const exportsDir = path.resolve("./exports");
+    const safePath = path.resolve(exportsDir, file);
+    if (!safePath.startsWith(exportsDir + path.sep)) {
+      res.status(400).json({ error: "Nombre de archivo inválido" });
+      return;
+    }
+    try {
+      const data = await readFile(safePath, "utf8");
+      res.type("text/plain").send(data);
+    } catch {
+      res.status(500).json({ error: "No se pudo exportar el archivo solicitado" });
+    }
+    if (!safePath.startsWith(exportsDir + path.sep)) {
+      res.status(400).json({ error: "Nombre de archivo inválido" });
+      return;
+    }
+    try {
+      const data = await readFile(safePath, "utf8");
+      res.type("text/plain").send(data);
+    } catch {
+      res.status(500).json({ error: "No se pudo exportar el archivo solicitado" });
+    }
   });
-});
 
-router.get(
-  "/resumen",
-  asyncHandler(async (_req, res) => {
-    const all = await listPlaces();
-    const slugs = braces.expand(`{${all.map((place) => place.slug).join(",")}}`);
-    const included = all.filter((place) => slugs.includes(place.slug));
-    const body = included
-      .map(
-        (place) =>
-          `${place.name} · ${place.location} (${place.vibe})\n${wrapText(place.description, 70)}\n`
-      )
-      .join("\n");
-    res.type("text/plain").send(`Costa Rica Vibe — resumen\n\n${body}`);
-  })
-);
+  router.get(
+    "/resumen",
+    asyncHandler(async (_req, res) => {
+      const all = await listPlaces();
+      const slugs = braces.expand(`{${all.map((place) => place.slug).join(",")}}`);
+      const included = all.filter((place) => slugs.includes(place.slug));
+      const body = included
+        .map(
+          (place) =>
+            `${place.name} · ${place.location} (${place.vibe})\n${wrapText(place.description, 70)}\n`
+        )
+        .join("\n");
+      res.type("text/plain").send(`Costa Rica Vibe — resumen\n\n${body}`);
+    })
+  );
 
-export default router;
+  export default router;
